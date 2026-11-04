@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+backend/uploads/
+backend/assets/fonts/*.ttf
+.DS_Store
