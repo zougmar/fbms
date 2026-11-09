@@ -1,6 +1,5 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const { z } = require('zod');
 const { Order, Product, User } = require('../models');
@@ -18,9 +17,9 @@ const { previewOrderImport, commitOrderImport } = require('../services/importer'
 const { notifyDeliveryStatus, notifyAssignment } = require('../services/notifications');
 
 const router = express.Router();
-const uploadDir = path.join(__dirname, '../../uploads/imports');
-fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir, limits: { fileSize: 8 * 1024 * 1024 } });
+const { uploadDir } = require('../uploads');
+const importDir = uploadDir('imports');
+const upload = multer({ dest: importDir, limits: { fileSize: 8 * 1024 * 1024 } });
 
 function presentOrder(order, user) {
   const obj = order.toObject ? order.toObject() : { ...order };

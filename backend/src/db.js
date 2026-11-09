@@ -32,7 +32,9 @@ async function standardUri(uri) {
   return `mongodb://${user}:${pass}@${hosts.join(',')}${db}?${params.toString()}`;
 }
 
-async function connectDB() {
+let connectionPromise;
+
+async function openConnection() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
     throw new Error('MONGODB_URI is not set');
@@ -41,16 +43,28 @@ async function connectDB() {
     throw new Error('JWT_SECRET is not set');
   }
   mongoose.set('strictQuery', true);
+  const onVercel = Boolean(process.env.VERCEL);
   // mongodb+srv needs a TXT lookup that times out on this network. SRV hosts still resolve.
-  const connectUri = uri.startsWith('mongodb+srv://') ? await standardUri(uri) : uri;
+  const connectUri = !onVercel && uri.startsWith('mongodb+srv://') ? await standardUri(uri) : uri;
   await mongoose.connect(connectUri, {
     serverSelectionTimeoutMS: 15000,
-    maxPoolSize: 30,
-    minPoolSize: 2,
+    maxPoolSize: onVercel ? 5 : 30,
+    minPoolSize: onVercel ? 0 : 2,
     retryWrites: true,
     retryReads: true
   });
   return mongoose.connection;
+}
+
+async function connectDB() {
+  if (mongoose.connection.readyState === 1) return mongoose.connection;
+  if (!connectionPromise) {
+    connectionPromise = openConnection().catch((error) => {
+      connectionPromise = null;
+      throw error;
+    });
+  }
+  return connectionPromise;
 }
 
 module.exports = { connectDB };

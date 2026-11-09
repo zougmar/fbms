@@ -1,26 +1,64 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 const { connectDB } = require('./src/db');
 const { migrateAccess } = require('./src/services/migrateAccess');
+const { uploadRoot } = require('./src/uploads');
 const { notFound, errorHandler } = require('./src/middleware/errors');
+
+function allowedOrigin(origin) {
+  const allowed = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((item) => item.trim()).filter(Boolean);
+  if (!origin || allowed.includes(origin)) return true;
+  if (process.env.NODE_ENV !== 'production') return true;
+  try {
+    const { protocol, host } = new URL(origin);
+    if (protocol !== 'https:' && protocol !== 'http:') return false;
+    if (process.env.VERCEL_URL && host === process.env.VERCEL_URL) return true;
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL && host === process.env.VERCEL_PROJECT_PRODUCTION_URL) return true;
+    if (process.env.VERCEL && host.endsWith('.vercel.app')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+let ready;
+function ensureReady() {
+  if (!ready) {
+    ready = connectDB()
+      .then(() => migrateAccess())
+      .catch((error) => {
+        ready = null;
+        throw error;
+      });
+  }
+  return ready;
+}
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin(origin, callback) {
-    const allowed = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((item) => item.trim());
-    if (!origin || allowed.includes(origin) || process.env.NODE_ENV !== 'production') return callback(null, true);
+    if (allowedOrigin(origin)) return callback(null, true);
     return callback(new Error('Origine non autorisée'));
   },
   credentials: true
 }));
 app.use(express.json({ limit: '2mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(async (req, res, next) => {
+  try {
+    await ensureReady();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+app.use('/uploads', express.static(uploadRoot));
+app.use('/api/uploads', express.static(uploadRoot));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, standardHeaders: true, legacyHeaders: false });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 1200, standardHeaders: true, legacyHeaders: false });
@@ -55,8 +93,7 @@ app.use(errorHandler);
 const port = process.env.PORT || 5000;
 
 if (require.main === module) {
-  connectDB()
-    .then(() => migrateAccess())
+  ensureReady()
     .then(() => {
       app.listen(port, () => {
         console.log(`FBMS API listening on ${port}`);

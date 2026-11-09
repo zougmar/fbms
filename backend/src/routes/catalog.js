@@ -1,6 +1,4 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const { z } = require('zod');
 const { Product, Category } = require('../models');
@@ -12,11 +10,11 @@ const { logActivity } = require('../services/orderService');
 const { idempotency } = require('../middleware/idempotency');
 
 const router = express.Router();
-const uploadDir = path.join(__dirname, '../../uploads/products');
-fs.mkdirSync(uploadDir, { recursive: true });
+const { uploadDir } = require('../uploads');
+const productDir = uploadDir('products');
 const upload = multer({
   storage: multer.diskStorage({
-    destination: uploadDir,
+    destination: productDir,
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^\w.\-]+/g, '_')}`)
   }),
   limits: { fileSize: 5 * 1024 * 1024, files: 6 },

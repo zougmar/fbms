@@ -86,10 +86,10 @@ const PAYMENT_MAP = {
   refunded: 'refunded'
 };
 
+const { uploadDir } = require('../uploads');
+
 function importDir() {
-  const dir = path.join(__dirname, '../../uploads/imports');
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  return uploadDir('imports');
 }
 
 async function readRows(filePath) {
